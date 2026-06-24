@@ -82,12 +82,6 @@
     </div>
   </div>
 
-  <div class="card" style="margin-top:16px">
-    <h2>③ 结果表头（用逗号分隔，第一项对应型号列，其余按右表列顺序）</h2>
-    <input type="text" id="headers" style="width:100%"
-      value="Part Number,Qty,Brand,Unit Price (CNY),Unit Price (USD),Total Price (USD),DC,Lead Time,notice,Unit Weight (g),Total Packaged Weight (g),Packaged Dimensions (cm),Description">
-  </div>
-
   <div class="toolbar">
     <button id="run">▶ 匹配回填</button>
     <button id="copy" class="ghost" disabled>📋 复制结果（含表头）</button>
@@ -213,11 +207,9 @@ function run(){
   $("copy").disabled=$("copyNoHead").disabled=$("dl").disabled=$("dlCmp").disabled=false;
 }
 
-/* 表头以用户填写的为准（逗号分隔），列数 = 表头项数 */
-function headerCols(){
-  const custom=$("headers").value.split(/[,，\t]/).map(s=>s.trim()).filter(Boolean);
-  return custom.length?custom:["型号"];
-}
+/* 固定结果表头；列数 = 表头项数 */
+const HEADERS=["Part Number","Qty","Brand","Unit Price (CNY)","Unit Price (USD)","Total Price (USD)","DC","Lead Time","notice","Unit Weight (g)","Total Packaged Weight (g)","Packaged Dimensions (cm)","Description"];
+function headerCols(){ return HEADERS; }
 /* 把一行结果补齐到表头列数：第一列=型号，其余=右表数据，缺的留空 */
 function rowCells(o){
   const n=headerCols().length;
