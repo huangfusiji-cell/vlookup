@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>型号匹配回填工具 (VLOOKUP)</title>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#172033; --line:#334155;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --ok:#22c55e;
+    --warn:#f59e0b; --err:#ef4444; --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5}
+  header{padding:18px 24px;border-bottom:1px solid var(--line);
+    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0}
+  header .sub{color:var(--muted);font-size:12px}
+  main{padding:20px 24px;max-width:1500px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+  .card h2{font-size:14px;margin:0 0 4px}
+  .card .hint{color:var(--muted);font-size:12px;margin-bottom:8px}
+  textarea{width:100%;min-height:230px;background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);border-radius:8px;padding:10px;font-family:Consolas,monospace;
+    font-size:13px;resize:vertical;white-space:pre;overflow:auto}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  button{background:var(--accent);color:#04293a;border:none;border-radius:8px;
+    padding:9px 16px;font-weight:600;cursor:pointer;font-size:13px}
+  button.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .toolbar{display:flex;gap:10px;align-items:center;margin:18px 0;flex-wrap:wrap}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;white-space:nowrap}
+  th{background:var(--panel2);position:sticky;top:0}
+  tr.miss td{color:var(--err)}
+  tr.extra td{color:var(--warn)}
+  .tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600}
+  .tag.ok{background:rgba(34,197,94,.15);color:var(--ok)}
+  .tag.miss{background:rgba(239,68,68,.15);color:var(--err)}
+  .tag.extra{background:rgba(245,158,11,.15);color:var(--warn)}
+  .stat{color:var(--muted);font-size:12px;margin-left:auto}
+  .scroll{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px}
+  details{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+  summary{cursor:pointer;font-weight:600}
+  input[type=text],input[type=password]{background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:13px}
+  .ocr-target{display:inline-flex;gap:14px;margin:8px 0}
+  label.radio{display:inline-flex;gap:5px;align-items:center;color:var(--muted);cursor:pointer}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--ok);color:#04210f;padding:10px 20px;border-radius:8px;font-weight:600;
+    opacity:0;transition:opacity .25s;pointer-events:none}
+  .toast.show{opacity:1}
+  .toast.err{background:var(--err);color:#fff}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>型号匹配回填工具</h1>
+  <span class="sub">左表=要报的型号顺序 · 右表=能报的型号+数据 → 按型号匹配，回填到左表位置，一键复制回 Excel</span>
+</header>
+
+<main>
+  <div class="grid">
+    <div class="card">
+      <h2>① 左表：要报的型号清单（决定输出顺序）</h2>
+      <div class="hint">每行一个型号。第一列当作型号；后面若有自带列也会保留。可直接从 Excel 复制粘贴。</div>
+      <textarea id="left" placeholder="AD5258BRMZ1-R7&#10;LT1763CS8#TRPBF&#10;LT5560EDD#TRPBF&#10;HMC472ALP4ETR&#10;..."></textarea>
+    </div>
+    <div class="card">
+      <h2>② 右表：能报的型号 + 数据（数据源）</h2>
+      <div class="hint">第一列=型号，后面所有列=要回填的数据（数量/品牌/单价/总价/库存/货期…你贴几列就回填几列）。</div>
+      <textarea id="right" placeholder="AD5258BRMZ1-R7&#9;300&#9;ADI&#9;8&#9;2400&#9;in3years&#9;1-2weeks&#10;LT1763CS8#TRPBF&#9;1400&#9;ADI&#9;7.8&#9;10920&#9;24+&#9;1-3weeks&#10;..."></textarea>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>③ 结果表头（用逗号分隔，第一项对应型号列，其余按右表列顺序）</h2>
+    <input type="text" id="headers" style="width:100%"
+      value="Part Number,Qty,Brand,Unit Price (CNY),Unit Price (USD),Total Price (USD),DC,Lead Time,notice,Unit Weight (g),Total Packaged Weight (g),Packaged Dimensions (cm),Description">
+  </div>
+
+  <div class="toolbar">
+    <button id="run">▶ 匹配回填</button>
+    <button id="copy" class="ghost" disabled>📋 复制结果（含表头）</button>
+    <button id="copyNoHead" class="ghost" disabled>复制（不含表头）</button>
+    <button id="dl" disabled>⬇ 下载报表(.xlsx)</button>
+    <button id="dlCmp" disabled>⬇ 下载对比表(原始+报表·标红)</button>
+    <label class="radio"><input type="checkbox" id="keepRightPn"> 结果里也保留右表型号列（核对用）</label>
+    <span class="stat" id="stat"></span>
+  </div>
+
+  <div class="scroll" id="resultWrap" style="display:none">
+    <table id="result"></table>
+  </div>
+
+  <details>
+    <summary>📷 用图片识别录入（可选 · 需 Gemini API Key）</summary>
+    <div class="hint" style="margin-top:8px">
+      上传截图/拍照，自动识别成「型号 + 数据」并填入上面对应的输入框。复用你项目里已在用的 Gemini（多模态，能直接读表格，无需另加 OCR）。
+      Key 只存在你本机浏览器（localStorage），不会上传到任何服务器（除 Google 官方接口）。
+    </div>
+    <div class="row">
+      <input type="password" id="apiKey" placeholder="粘贴 Gemini API Key" style="min-width:320px">
+      <input type="text" id="model" placeholder="模型，默认 gemini-2.5-flash" style="min-width:240px">
+    </div>
+    <div class="ocr-target">
+      识别结果填到：
+      <label class="radio"><input type="radio" name="ocrTarget" value="left"> 左表</label>
+      <label class="radio"><input type="radio" name="ocrTarget" value="right" checked> 右表</label>
+    </div>
+    <div class="row">
+      <input type="file" id="img" accept="image/*">
+      <button id="ocr" class="ghost">识别图片 →</button>
+      <span class="stat" id="ocrStat"></span>
+    </div>
+  </details>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== 型号归一化：与项目 src/lib/part-number.ts 完全一致 ===== */
+function normalizePartNumber(input){
+  if(input==null) return "";
+  return input.normalize("NFKC").replace(/\s+/gu,"").toUpperCase();
+}
+
+/* ===== 解析粘贴文本为二维数组 ===== */
+function parseTable(text){
+  const rows=[];
+  text.split(/\r?\n/).forEach(line=>{
+    if(line.trim()==="") return;
+    let cells;
+    if(line.includes("\t")) cells=line.split("\t");
+    else cells=line.split(/ {2,}|\t/);            // 无制表符时按 2+ 空格分列
+    cells=cells.map(c=>c.trim());
+    rows.push(cells);
+  });
+  return rows;
+}
+
+const $=id=>document.getElementById(id);
+let lastResult=null;
+
+/* localStorage 容错：沙箱/隐私模式下访问会抛异常，包起来避免中断脚本 */
+const store={
+  get(k){ try{return localStorage.getItem(k)||"";}catch(e){return "";} },
+  set(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
+};
+
+function toast(msg,isErr){
+  const t=$("toast"); t.textContent=msg;
+  t.className="toast show"+(isErr?" err":"");
+  setTimeout(()=>t.className="toast",1600);
+}
+
+function run(){
+  const leftRows=parseTable($("left").value);
+  const rightRows=parseTable($("right").value);
+  if(!leftRows.length){toast("左表是空的",true);return;}
+  if(!rightRows.length){toast("右表是空的",true);return;}
+
+  // 右表建索引：归一化型号 -> 该行数据列（去掉型号列）
+  const rightDataCols=Math.max(0,...rightRows.map(r=>r.length-1));
+  const map=new Map();
+  const usedKeys=new Set();
+  rightRows.forEach(r=>{
+    const key=normalizePartNumber(r[0]);
+    if(key && !map.has(key)) map.set(key,r);   // 同型号取第一条
+  });
+
+  const leftExtraCols=Math.max(0,...leftRows.map(r=>r.length-1)); // 左表型号后自带的列
+  const keepRightPn=$("keepRightPn").checked;
+
+  const out=[];
+  let okN=0, missN=0;
+  leftRows.forEach(r=>{
+    const pn=r[0]||"";
+    const key=normalizePartNumber(pn);
+    const leftExtra=[]; for(let i=1;i<=leftExtraCols;i++) leftExtra.push(r[i]??"");
+    const hit=map.get(key);
+    let status, data;
+    if(hit){
+      usedKeys.add(key); okN++;
+      status="ok";
+      data=[]; for(let i=1;i<=rightDataCols;i++) data.push(hit[i]??"");
+    }else{
+      missN++; status="miss";
+      data=new Array(rightDataCols).fill("");
+    }
+    out.push({pn, rightPn:hit?hit[0]:"", leftExtra, data, status});
+  });
+
+  // 右表里左表没要的（多出来的）
+  const extras=[];
+  rightRows.forEach(r=>{
+    const key=normalizePartNumber(r[0]);
+    if(key && !usedKeys.has(key)) extras.push(r);
+  });
+
+  lastResult={out,extras,leftExtraCols,rightDataCols,keepRightPn};
+  render();
+  $("stat").textContent=`匹配 ${okN} · 未匹配 ${missN} · 右表多余 ${extras.length}`;
+  $("copy").disabled=$("copyNoHead").disabled=$("dl").disabled=$("dlCmp").disabled=false;
+}
+
+/* 表头以用户填写的为准（逗号分隔），列数 = 表头项数 */
+function headerCols(){
+  const custom=$("headers").value.split(/[,，\t]/).map(s=>s.trim()).filter(Boolean);
+  return custom.length?custom:["型号"];
+}
+/* 把一行结果补齐到表头列数：第一列=型号，其余=右表数据，缺的留空 */
+function rowCells(o){
+  const n=headerCols().length;
+  const cells=[o.pn,...o.data];
+  while(cells.length<n) cells.push("");
+  return cells.slice(0,n);
+}
+
+function render(){
+  const {out,extras}=lastResult;
+  const head=[...headerCols(),"状态"];
+
+  let html="<thead><tr>"+head.map(h=>`<th>${esc(h)}</th>`).join("")+"</tr></thead><tbody>";
+  out.forEach(o=>{
+    const cells=rowCells(o);
+    const tag=o.status==="ok"?`<span class="tag ok">✔ 匹配</span>`:`<span class="tag miss">✘ 无报价</span>`;
+    html+=`<tr class="${o.status==='miss'?'miss':''}">`+cells.map(c=>`<td>${esc(c)}</td>`).join("")+`<td>${tag}</td></tr>`;
+  });
+  extras.forEach(r=>{
+    const span=head.length;
+    html+=`<tr class="extra"><td>${esc(r[0])}</td><td colspan="${span-2}">${esc(r.slice(1).join("  |  "))}</td><td><span class="tag extra">⚠ 左表未要</span></td></tr>`;
+  });
+  html+="</tbody>";
+  $("result").innerHTML=html;
+  $("resultWrap").style.display="";
+}
+
+function esc(s){return String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+/* ===== 复制：生成 Tab 分隔，可直接粘回 Excel，行序=左表顺序 ===== */
+function buildTSV(withHead){
+  const {out}=lastResult;
+  const lines=[];
+  if(withHead) lines.push(headerCols().join("\t"));
+  out.forEach(o=>lines.push(rowCells(o).join("\t")));
+  return lines.join("\n");
+}
+async function copy(withHead){
+  if(!lastResult) return;
+  const text=buildTSV(withHead);
+  // 优先用现代剪贴板 API（仅 https/localhost 等安全上下文可用）
+  if(navigator.clipboard && window.isSecureContext){
+    try{ await navigator.clipboard.writeText(text); toast("已复制，去 Excel 按 Ctrl+V"); return; }
+    catch(e){ /* 失败则走兜底 */ }
+  }
+  // 兜底：file:// 或沙箱环境用旧版 execCommand
+  try{
+    const ta=document.createElement("textarea");
+    ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const ok=document.execCommand("copy");
+    document.body.removeChild(ta);
+    toast(ok?"已复制，去 Excel 按 Ctrl+V":"复制失败，请手动选中复制",!ok);
+  }catch(e){ toast("复制失败："+e.message,true); }
+}
+
+/* ===== 下载 Excel：居中、有型号的行加框线、字体大、列宽自动 ===== */
+async function downloadXlsx(){
+  if(!lastResult) return;
+  if(typeof ExcelJS==="undefined"){ toast("ExcelJS 未加载（需联网），改用复制",true); return; }
+  const headers=headerCols();
+  const dataArr=lastResult.out.map(o=>rowCells(o));
+
+  // 纯数字（可带千分位逗号/小数）转成真正的数值；型号列(0)及含字母/横杠的保持文本
+  const numify=(v,col)=>{
+    if(col===0) return v;
+    const s=String(v).trim();
+    if(s!=="" && /^-?\d{1,3}(,\d{3})*(\.\d+)?$|^-?\d+(\.\d+)?$/.test(s))
+      return Number(s.replace(/,/g,""));
+    return v;
+  };
+
+  // 先按内容算好每列宽度（中文/全角按 2 计宽）
+  const widths=headers.map((h,i)=>{
+    let max=0;
+    for(const row of [headers,...dataArr]){
+      const v=row[i]==null?"":String(row[i]);
+      let w=0; for(const ch of v) w+=(ch.charCodeAt(0)>255?2:1);
+      if(w>max) max=w;
+    }
+    return Math.min(Math.max(max+2,6),60);
+  });
+
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet("报价");
+  // 关键：先定义列(含宽度)，再填数据 —— 浏览器里这种写法列宽最可靠
+  ws.columns=headers.map((h,i)=>({width:widths[i]}));
+
+  const border={style:"thin",color:{argb:"FF000000"}};
+  const allBorder={top:border,left:border,bottom:border,right:border};
+  const center={vertical:"middle",horizontal:"center",wrapText:false};
+
+  // 表头行
+  const headRow=ws.addRow(headers);
+  headRow.height=22;
+  headRow.eachCell(c=>{
+    c.alignment=center;
+    c.font={bold:true,size:12};
+    c.border=allBorder;
+    c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE6E6E6"}};
+  });
+
+  // 数据行：居中、字号 12；有型号的行加框线
+  lastResult.out.forEach((o,ri)=>{
+    const r=ws.addRow(dataArr[ri].map((v,i)=>numify(v,i)));
+    r.height=20;
+    const hasPn=!!String(o.pn).trim();
+    r.eachCell({includeEmpty:true},c=>{
+      c.alignment=center;
+      c.font={size:12};
+      if(hasPn) c.border=allBorder;
+    });
+  });
+
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="报价_"+new Date().toISOString().slice(0,10)+".xlsx";
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("已下载 Excel");
+}
+
+/* ===== 数值/型号是否相等（用于对比） ===== */
+function numify1(v,col){
+  if(col===0) return v;
+  const s=String(v).trim();
+  if(s!=="" && /^-?\d{1,3}(,\d{3})*(\.\d+)?$|^-?\d+(\.\d+)?$/.test(s)) return Number(s.replace(/,/g,""));
+  return v;
+}
+function sameVal(a,b){
+  const sa=String(a??"").trim(), sb=String(b??"").trim();
+  if(sa===""||sb==="") return true;                 // 一方为空不算“变化”
+  const na=Number(sa.replace(/,/g,"")), nb=Number(sb.replace(/,/g,""));
+  if(!isNaN(na)&&!isNaN(nb)) return na===nb;          // 数字按数值比（忽略千分位）
+  return sa.toUpperCase()===sb.toUpperCase();
+}
+
+/* ===== 下载对比表：原始(左表)+报表 并排，型号/Qty 变了标红 ===== */
+async function downloadCompareXlsx(){
+  if(!lastResult) return;
+  if(typeof ExcelJS==="undefined"){ toast("ExcelJS 未加载（需联网）",true); return; }
+  const {out,leftExtraCols}=lastResult;
+  const headers=headerCols();
+  const origN=1+leftExtraCols;                        // 原始块列数（型号+左表自带列，如 Qty）
+  const origHead=[]; for(let i=0;i<origN;i++) origHead.push(headers[i]||("列"+(i+1)));
+  const allHead=[...origHead,...headers];             // 原始块 + 报表块
+
+  // 组装每行数据 + 标红位置（记录报表块里哪些格子要红字）
+  const rows=out.map(o=>{
+    const orig=[o.pn,...o.leftExtra]; while(orig.length<origN) orig.push("");
+    const reportPN=o.rightPn||o.pn;
+    const report=[reportPN,...o.data]; while(report.length<headers.length) report.push("");
+    const redReport=new Array(headers.length).fill(false);
+    // 型号变化：原始字符串与报表型号不同（大小写/后缀/空白差异也算）
+    if(String(reportPN).trim() && String(reportPN).trim()!==String(o.pn).trim()) redReport[0]=true;
+    // Qty 变化：原始 Qty(左表第2列) vs 报表 Qty(headers 第2列)
+    if(headers.length>1 && leftExtraCols>=1 && !sameVal(o.leftExtra[0],o.data[0])) redReport[1]=true;
+    return {orig,report,redReport,hasPn:!!String(o.pn).trim()};
+  });
+
+  // 列宽
+  const widthsOf=arr=>{
+    let max=0; for(const s of arr){ const v=s==null?"":String(s); let w=0; for(const ch of v) w+=(ch.charCodeAt(0)>255?2:1); if(w>max) max=w; } return Math.min(Math.max(max+2,6),60);
+  };
+  const colWidths=[];
+  for(let i=0;i<origN;i++) colWidths.push(widthsOf([origHead[i],...rows.map(r=>r.orig[i])]));
+  for(let i=0;i<headers.length;i++) colWidths.push(widthsOf([headers[i],...rows.map(r=>r.report[i])]));
+
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet("对比");
+  ws.columns=colWidths.map(w=>({width:w}));
+
+  const border={style:"thin",color:{argb:"FF000000"}};
+  const allBorder={top:border,left:border,bottom:border,right:border};
+  const center={vertical:"middle",horizontal:"center",wrapText:false};
+
+  // 表头
+  const headRow=ws.addRow(allHead);
+  headRow.height=22;
+  headRow.eachCell((c,col)=>{
+    c.alignment=center; c.border=allBorder;
+    c.font={bold:true,size:12};
+    // 给两个块不同底色，便于区分
+    c.fill={type:"pattern",pattern:"solid",fgColor:{argb: col<=origN?"FFD9E1F2":"FFE6E6E6"}};
+  });
+
+  // 数据
+  rows.forEach(r=>{
+    const vals=[...r.orig,...r.report].map((v,i)=>numify1(v,i===0?0:(i===origN?0:1)));
+    const row=ws.addRow(vals);
+    row.height=20;
+    row.eachCell({includeEmpty:true},(c,col)=>{
+      c.alignment=center;
+      const isRed = col>origN && r.redReport[col-origN-1];  // 报表块且该格标红
+      c.font={size:12, color: isRed?{argb:"FFFF0000"}:undefined, bold:isRed||false};
+      if(r.hasPn) c.border=allBorder;
+    });
+  });
+
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="报价对比_"+new Date().toISOString().slice(0,10)+".xlsx";
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("已下载对比表");
+}
+
+/* ===== 图片识别：调 Gemini 多模态 ===== */
+$("apiKey").value=store.get("gemKey");
+$("model").value=store.get("gemModel");
+async function ocr(){
+  const key=$("apiKey").value.trim();
+  const model=($("model").value.trim()||"gemini-2.5-flash");
+  const file=$("img").files[0];
+  if(!key){toast("先填 Gemini API Key",true);return;}
+  if(!file){toast("先选一张图片",true);return;}
+  store.set("gemKey",key); store.set("gemModel",$("model").value.trim());
+  $("ocrStat").textContent="识别中…";
+  try{
+    const b64=await fileToB64(file);
+    const prompt="这是电子元件报价/清单表格的截图。请逐行提取每一行的所有单元格，按从左到右顺序，"+
+      "第一列必须是元件型号。输出纯文本，每行一条记录，单元格之间用制表符(Tab,\\t)分隔，"+
+      "不要表头、不要解释、不要markdown代码块、不要序号。型号原样保留（含 #、+、- 等符号和大小写）。";
+    const body={contents:[{parts:[
+      {text:prompt},
+      {inline_data:{mime_type:file.type,data:b64}}
+    ]}]};
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+    const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const j=await res.json();
+    if(!res.ok) throw new Error(j.error?.message||("HTTP "+res.status));
+    let txt=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join("")||"";
+    txt=txt.replace(/^```[\w]*\n?|```$/g,"").trim();
+    const target=document.querySelector('input[name=ocrTarget]:checked').value;
+    const box=$(target);
+    box.value=(box.value.trim()?box.value.trim()+"\n":"")+txt;
+    $("ocrStat").textContent="已填入"+(target==="left"?"左表":"右表");
+    toast("识别完成");
+  }catch(e){ $("ocrStat").textContent=""; toast("识别失败："+e.message,true); }
+}
+function fileToB64(file){
+  return new Promise((ok,no)=>{
+    const r=new FileReader();
+    r.onload=()=>ok(r.result.split(",")[1]);
+    r.onerror=no; r.readAsDataURL(file);
+  });
+}
+
+$("run").onclick=run;
+$("copy").onclick=()=>copy(true);
+$("copyNoHead").onclick=()=>copy(false);
+$("dl").onclick=downloadXlsx;
+$("dlCmp").onclick=downloadCompareXlsx;
+$("keepRightPn").onchange=()=>{ if(lastResult){render();} };
+$("ocr").onclick=ocr;
+</script>
+</body>
+</html>
