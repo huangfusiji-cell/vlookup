@@ -21,26 +21,26 @@
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
     background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5}
-  header{padding:18px 24px;border-bottom:1px solid var(--line);
-    display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-  header h1{font-size:18px;margin:0}
-  header .sub{color:var(--muted);font-size:12px}
-  main{padding:20px 24px;max-width:1800px;margin:0 auto}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
-  .card h2{font-size:14px;margin:0 0 4px}
-  .card .hint{color:var(--muted);font-size:12px;margin-bottom:8px}
-  textarea{width:100%;min-height:230px;background:var(--panel2);color:var(--txt);
-    border:1px solid var(--line);border-radius:8px;padding:10px;font-family:Consolas,monospace;
+  header{padding:10px 18px;border-bottom:1px solid var(--line);
+    display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0}
+  header .sub{color:var(--muted);font-size:11px}
+  main{padding:12px 18px;max-width:1800px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px}
+  .card h2{font-size:13px;margin:0 0 2px}
+  .card .hint{color:var(--muted);font-size:11px;margin-bottom:5px}
+  textarea{width:100%;min-height:150px;background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);border-radius:8px;padding:8px;font-family:Consolas,monospace;
     font-size:13px;resize:vertical;white-space:pre;overflow:auto}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
-  button{background:var(--accent);color:#04293a;border:none;border-radius:8px;
-    padding:9px 16px;font-weight:600;cursor:pointer;font-size:13px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  button{background:var(--accent);color:#04293a;border:none;border-radius:7px;
+    padding:7px 13px;font-weight:600;cursor:pointer;font-size:13px}
   button.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
   button:disabled{opacity:.5;cursor:not-allowed}
-  .toolbar{display:flex;gap:10px;align-items:center;margin:18px 0;flex-wrap:wrap}
+  .toolbar{display:flex;gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap}
   table{border-collapse:collapse;width:100%;font-size:13px}
-  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;white-space:nowrap}
+  th,td{border:1px solid var(--line);padding:4px 7px;text-align:left;white-space:nowrap}
   th{background:var(--panel2);position:sticky;top:0}
   tr.miss td{color:var(--err)}
   tr.extra td{color:var(--warn)}
@@ -54,8 +54,8 @@
   #resultWrap{width:96vw;position:relative;left:50%;transform:translateX(-50%)}
   /* 列宽随内容自适应；型号等内容始终单行不折断，太长则列自动加宽 */
   #result{table-layout:auto;width:max-content;min-width:100%}
-  #result th,#result td{white-space:nowrap;font-size:12px;padding:5px 8px}
-  details{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+  #result th,#result td{white-space:nowrap;font-size:12px;padding:3px 7px;text-align:center}
+  details{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px}
   summary{cursor:pointer;font-weight:600}
   input[type=text],input[type=password]{background:var(--panel2);color:var(--txt);
     border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:13px}
@@ -216,7 +216,7 @@ function run(){
 }
 
 /* 固定结果表头；列数 = 表头项数 */
-const HEADERS=["Part Number","Qty","Brand","Unit Price (CNY)","Unit Price (USD)","Total Price (USD)","DC","Lead Time","notice","Unit Weight (g)","Total Packaged Weight (g)","Packaged Dimensions (cm)","Description"];
+const HEADERS=["Part Number","Qty","Brand","Unit Price (CNY)","Unit Price (USD)","Total Price (USD)","DC","Lead Time","notice","Weight (g)","Total Weight (g)","Dimensions (cm)","Description"];
 function headerCols(){ return HEADERS; }
 /* 把一行结果补齐到表头列数：第一列=型号，其余=右表数据，缺的留空 */
 function rowCells(o){
