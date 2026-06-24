@@ -211,10 +211,10 @@ function rowCells(o){
 function render(){
   const {out,extras}=lastResult;
   const {origHead,headers,rows}=buildCompareModel();
-  const span=1+origHead.length+headers.length+1;
+  const span=2+origHead.length+headers.length+1;
 
-  // 表头：重合度 + 原始块(浅蓝) + 报表块(默认) + 状态
-  let html="<thead><tr><th class=\"sim\">重合度</th>";
+  // 表头：数量变化 + 重合度 + 原始块(浅蓝) + 报表块(默认) + 状态
+  let html="<thead><tr><th class=\"sim\">数量变化</th><th class=\"sim\">重合度</th>";
   origHead.forEach(h=>html+=`<th class="orig">${esc(h)}</th>`);
   headers.forEach(h=>html+=`<th>${esc(h)}</th>`);
   html+="<th>状态</th></tr></thead><tbody>";
@@ -223,6 +223,8 @@ function render(){
     const r=rows[ri];
     const miss=o.status==="miss";
     html+="<tr>";
+    // 数量变化
+    html+=`<td class="sim"${r.qtyDelta?' style="background:#ffcc80;color:#000;font-weight:600"':''}>${esc(r.qtyDelta)}</td>`;
     // 重合度
     html+=`<td class="sim"${r.sim.pct<100?' style="color:var(--warn)"':''}>${esc(simText(r.sim))}</td>`;
     // 原始块：未匹配时型号标红
@@ -239,7 +241,7 @@ function render(){
     html+=`<td>${tag}</td></tr>`;
   });
   extras.forEach(r=>{
-    html+=`<tr class="extra"><td></td><td>${esc(r[0])}</td><td colspan="${span-3}">${esc(r.slice(1).join("  |  "))}</td><td><span class="tag extra">⚠ 左表未要</span></td></tr>`;
+    html+=`<tr class="extra"><td></td><td></td><td>${esc(r[0])}</td><td colspan="${span-4}">${esc(r.slice(1).join("  |  "))}</td><td><span class="tag extra">⚠ 左表未要</span></td></tr>`;
   });
   html+="</tbody>";
   $("result").innerHTML=html;
@@ -300,9 +302,14 @@ function buildCompareModel(){
       reportPN=o.pn;          // 无对照，回显原型号
     }
     const report=[reportPN,...reportData]; while(report.length<headers.length) report.push("");
-    // 数量变化：报表 Qty 与原始 Qty 不同 → 橙色填充
-    if(headers.length>1 && leftExtraCols>=1 && String(reportData[0]??"").trim()!=="" && !sameVal(o.leftExtra[0],reportData[0])) orangeReport[1]=true;
-    return {orig,report,redReport,yellowReport,orangeReport,hasPn:!!String(o.pn).trim(),sim};
+    // 数量变化：报表 Qty 与原始 Qty 不同 → 橙色填充，并算出变化量
+    let qtyDelta="";
+    if(headers.length>1 && leftExtraCols>=1 && String(reportData[0]??"").trim()!=="" && !sameVal(o.leftExtra[0],reportData[0])){
+      orangeReport[1]=true;
+      const a=Number(String(o.leftExtra[0]??"").replace(/,/g,"")), b=Number(String(reportData[0]).replace(/,/g,""));
+      qtyDelta=(!isNaN(a)&&!isNaN(b)) ? ((b-a>0?"+":"")+(b-a)) : "变化";
+    }
+    return {orig,report,redReport,yellowReport,orangeReport,qtyDelta,hasPn:!!String(o.pn).trim(),sim};
   });
   return {origHead,headers,rows};
 }
@@ -312,8 +319,8 @@ function simText(s){ return s&&s.pct ? s.pct+"% "+s.label : (s?s.label:""); }
 function buildTSV(withHead){
   const {origHead,headers,rows}=buildCompareModel();
   const lines=[];
-  if(withHead) lines.push(["重合度",...origHead,...headers].join("\t"));
-  rows.forEach(r=>lines.push([simText(r.sim),...r.orig,...r.report].join("\t")));
+  if(withHead) lines.push(["数量变化","重合度",...origHead,...headers].join("\t"));
+  rows.forEach(r=>lines.push([r.qtyDelta,simText(r.sim),...r.orig,...r.report].join("\t")));
   return lines.join("\n");
 }
 
