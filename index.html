@@ -237,11 +237,14 @@ function render(){
       else if(r.redReport[i]) st=' style="color:var(--err);font-weight:600"';
       html+=`<td${st}>${esc(c)}</td>`;
     });
-    const tag=miss?`<span class="tag miss">✘ 无报价</span>`:`<span class="tag ok">✔ 匹配</span>`;
+    // 型号和数量都有值，且都与原始相同(型号重合度100% 且 数量无变化) → 匹配；否则需人工检查
+    const pnPresent = String(r.report[0]??"").trim()!=="";
+    const qtyPresent = headers.length>1 && String(r.report[1]??"").trim()!=="";
+    const matched = pnPresent && qtyPresent && r.sim.pct===100 && !r.qtyDelta;
+    const tag = matched
+      ? `<span class="tag ok">✔ 匹配</span>`
+      : `<span class="tag extra">⚠ 需要人工检查</span>`;
     html+=`<td>${tag}</td></tr>`;
-  });
-  extras.forEach(r=>{
-    html+=`<tr class="extra"><td></td><td></td><td>${esc(r[0])}</td><td colspan="${span-4}">${esc(r.slice(1).join("  |  "))}</td><td><span class="tag extra">⚠ 左表未要</span></td></tr>`;
   });
   html+="</tbody>";
   $("result").innerHTML=html;
