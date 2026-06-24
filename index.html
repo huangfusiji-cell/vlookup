@@ -53,8 +53,10 @@
   /* 结果表：全屏宽 + 单元格可换行，尽量一屏容纳所有列 */
   #resultWrap{width:96vw;position:relative;left:50%;transform:translateX(-50%)}
   /* 列宽随内容自适应；型号等内容始终单行不折断，太长则列自动加宽 */
-  #result{table-layout:auto;width:max-content;min-width:100%}
+  #result{table-layout:auto;width:max-content;max-width:100%;margin:0 auto}
   #result th,#result td{white-space:nowrap;font-size:12px;padding:3px 7px;text-align:center}
+  #result .orig{background:rgba(56,189,248,.10)}
+  #result th.orig{background:rgba(56,189,248,.22)}
   details{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px}
   summary{cursor:pointer;font-weight:600}
   input[type=text],input[type=password]{background:var(--panel2);color:var(--txt);
@@ -104,27 +106,6 @@
     <table id="result"></table>
   </div>
 
-  <details>
-    <summary>📷 用图片识别录入（可选 · 需 Gemini API Key）</summary>
-    <div class="hint" style="margin-top:8px">
-      上传截图/拍照，自动识别成「型号 + 数据」并填入上面对应的输入框。复用你项目里已在用的 Gemini（多模态，能直接读表格，无需另加 OCR）。
-      Key 只存在你本机浏览器（localStorage），不会上传到任何服务器（除 Google 官方接口）。
-    </div>
-    <div class="row">
-      <input type="password" id="apiKey" placeholder="粘贴 Gemini API Key" style="min-width:320px">
-      <input type="text" id="model" placeholder="模型，默认 gemini-2.5-flash" style="min-width:240px">
-    </div>
-    <div class="ocr-target">
-      识别结果填到：
-      <label class="radio"><input type="radio" name="ocrTarget" value="left"> 左表</label>
-      <label class="radio"><input type="radio" name="ocrTarget" value="right" checked> 右表</label>
-    </div>
-    <div class="row">
-      <input type="file" id="img" accept="image/*">
-      <button id="ocr" class="ghost">识别图片 →</button>
-      <span class="stat" id="ocrStat"></span>
-    </div>
-  </details>
 </main>
 
 <div class="toast" id="toast"></div>
@@ -209,7 +190,8 @@ function run(){
     if(key && !usedKeys.has(key)) extras.push(r);
   });
 
-  lastResult={out,extras,leftExtraCols,rightDataCols,keepRightPn};
+  const rightPNs=rightRows.map(r=>r[0]).filter(Boolean);
+  lastResult={out,extras,leftExtraCols,rightDataCols,keepRightPn,rightPNs,rightRows};
   render();
   $("stat").textContent=`匹配 ${okN} · 未匹配 ${missN} · 右表多余 ${extras.length}`;
   $("copy").disabled=$("copyNoHead").disabled=$("dl").disabled=$("dlCmp").disabled=false;
@@ -228,17 +210,36 @@ function rowCells(o){
 
 function render(){
   const {out,extras}=lastResult;
-  const head=[...headerCols(),"状态"];
+  const {origHead,headers,rows}=buildCompareModel();
+  const span=1+origHead.length+headers.length+1;
 
-  let html="<thead><tr>"+head.map(h=>`<th>${esc(h)}</th>`).join("")+"</tr></thead><tbody>";
-  out.forEach(o=>{
-    const cells=rowCells(o);
-    const tag=o.status==="ok"?`<span class="tag ok">✔ 匹配</span>`:`<span class="tag miss">✘ 无报价</span>`;
-    html+=`<tr class="${o.status==='miss'?'miss':''}">`+cells.map(c=>`<td>${esc(c)}</td>`).join("")+`<td>${tag}</td></tr>`;
+  // 表头：重合度 + 原始块(浅蓝) + 报表块(默认) + 状态
+  let html="<thead><tr><th class=\"sim\">重合度</th>";
+  origHead.forEach(h=>html+=`<th class="orig">${esc(h)}</th>`);
+  headers.forEach(h=>html+=`<th>${esc(h)}</th>`);
+  html+="<th>状态</th></tr></thead><tbody>";
+
+  out.forEach((o,ri)=>{
+    const r=rows[ri];
+    const miss=o.status==="miss";
+    html+="<tr>";
+    // 重合度
+    html+=`<td class="sim"${r.sim.pct<100?' style="color:var(--warn)"':''}>${esc(simText(r.sim))}</td>`;
+    // 原始块：未匹配时型号标红
+    r.orig.forEach((c,i)=>html+=`<td class="orig"${i===0&&miss?' style="color:var(--err)"':''}>${esc(c)}</td>`);
+    // 报表块：近似填入的型号标黄，数量变化标橙，其他变化标红
+    r.report.forEach((c,i)=>{
+      let st="";
+      if(r.yellowReport[i]) st=' style="background:#fff3b0;color:#000"';
+      else if(r.orangeReport[i]) st=' style="background:#ffcc80;color:#000"';
+      else if(r.redReport[i]) st=' style="color:var(--err);font-weight:600"';
+      html+=`<td${st}>${esc(c)}</td>`;
+    });
+    const tag=miss?`<span class="tag miss">✘ 无报价</span>`:`<span class="tag ok">✔ 匹配</span>`;
+    html+=`<td>${tag}</td></tr>`;
   });
   extras.forEach(r=>{
-    const span=head.length;
-    html+=`<tr class="extra"><td>${esc(r[0])}</td><td colspan="${span-2}">${esc(r.slice(1).join("  |  "))}</td><td><span class="tag extra">⚠ 左表未要</span></td></tr>`;
+    html+=`<tr class="extra"><td></td><td>${esc(r[0])}</td><td colspan="${span-3}">${esc(r.slice(1).join("  |  "))}</td><td><span class="tag extra">⚠ 左表未要</span></td></tr>`;
   });
   html+="</tbody>";
   $("result").innerHTML=html;
@@ -246,6 +247,31 @@ function render(){
 }
 
 function esc(s){return String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+/* ===== 型号相似度：返回重合百分比 + 差异位置（前缀/后缀） ===== */
+function partSimilarity(a,b){
+  a=String(a||"").trim(); b=String(b||"").trim();
+  if(!a||!b) return {pct:0,label:"无对照"};
+  const A=a.normalize("NFKC").toUpperCase().replace(/\s+/gu,"");
+  const B=b.normalize("NFKC").toUpperCase().replace(/\s+/gu,"");
+  if(A===B) return {pct:100,label:"完全相同"};
+  let cp=0; while(cp<A.length&&cp<B.length&&A[cp]===B[cp]) cp++;          // 公共前缀
+  let cs=0; while(cs<A.length-cp&&cs<B.length-cp&&A[A.length-1-cs]===B[B.length-1-cs]) cs++; // 公共后缀
+  const pct=Math.round((cp+cs)/Math.max(A.length,B.length)*100);
+  let label;
+  if(cp+cs===0) label="完全不同";
+  else if(cp>0&&cs>0) label="前后缀都有差别";
+  else if(cs>0) label="前缀有差别";   // 后段相同、前段不同
+  else label="后缀有差别";            // 前段相同、后段不同
+  return {pct,label};
+}
+/* 在右表所有型号里找与 pn 最相似的一个，返回 {pct,label,pn:候选型号} */
+function bestSimilarity(pn){
+  const list=(lastResult.rightPNs)||[];
+  let best={pct:0,label:"无对照",pn:""};
+  for(const r of list){ const s=partSimilarity(pn,r); if(s.pct>best.pct) best={...s,pn:r}; }
+  return best;
+}
 
 /* ===== 对比数据模型：原始块(左表)+报表块，并记录哪些报表格子要标红 ===== */
 function buildCompareModel(){
@@ -255,22 +281,39 @@ function buildCompareModel(){
   const origHead=[]; for(let i=0;i<origN;i++) origHead.push(headers[i]||("列"+(i+1)));
   const rows=out.map(o=>{
     const orig=[o.pn,...o.leftExtra]; while(orig.length<origN) orig.push("");
-    const reportPN=o.rightPn||o.pn;
-    const report=[reportPN,...o.data]; while(report.length<headers.length) report.push("");
     const redReport=new Array(headers.length).fill(false);
-    if(String(reportPN).trim() && String(reportPN).trim()!==String(o.pn).trim()) redReport[0]=true;
-    if(headers.length>1 && leftExtraCols>=1 && !sameVal(o.leftExtra[0],o.data[0])) redReport[1]=true;
-    return {orig,report,redReport,hasPn:!!String(o.pn).trim()};
+    const yellowReport=new Array(headers.length).fill(false);
+    const orangeReport=new Array(headers.length).fill(false);
+    // 重合度：匹配上的与报表型号比；没匹配上的去右表找最接近的
+    const sim = o.rightPn ? partSimilarity(o.pn,o.rightPn) : bestSimilarity(o.pn);
+    let reportPN, reportData=o.data;
+    if(o.rightPn){
+      reportPN=o.rightPn;
+      if(String(reportPN).trim() && String(reportPN).trim()!==String(o.pn).trim()) redReport[0]=true;
+    }else if(sim.pn && sim.pct>0){
+      // 没精确匹配，但右表有近似型号：把这条近似型号的整段报价填进来并整行标黄
+      reportPN=sim.pn;
+      const cand=(lastResult.rightRows||[]).find(r=>r[0]===sim.pn);
+      reportData=[]; for(let i=1;i<=(lastResult.rightDataCols||0);i++) reportData.push(cand?(cand[i]??""):"");
+      yellowReport[0]=true;   // 只把型号格标黄，数据照填不标黄
+    }else{
+      reportPN=o.pn;          // 无对照，回显原型号
+    }
+    const report=[reportPN,...reportData]; while(report.length<headers.length) report.push("");
+    // 数量变化：报表 Qty 与原始 Qty 不同 → 橙色填充
+    if(headers.length>1 && leftExtraCols>=1 && String(reportData[0]??"").trim()!=="" && !sameVal(o.leftExtra[0],reportData[0])) orangeReport[1]=true;
+    return {orig,report,redReport,yellowReport,orangeReport,hasPn:!!String(o.pn).trim(),sim};
   });
   return {origHead,headers,rows};
 }
+function simText(s){ return s&&s.pct ? s.pct+"% "+s.label : (s?s.label:""); }
 
 /* ===== 复制(纯文本兜底)：对比布局，Tab 分隔 ===== */
 function buildTSV(withHead){
   const {origHead,headers,rows}=buildCompareModel();
   const lines=[];
-  if(withHead) lines.push([...origHead,...headers].join("\t"));
-  rows.forEach(r=>lines.push([...r.orig,...r.report].join("\t")));
+  if(withHead) lines.push(["重合度",...origHead,...headers].join("\t"));
+  rows.forEach(r=>lines.push([simText(r.sim),...r.orig,...r.report].join("\t")));
   return lines.join("\n");
 }
 
@@ -285,8 +328,11 @@ function buildHTMLTable(withHead){
   }
   rows.forEach(r=>{
     const bd=r.hasPn?'border:1px solid #000;':'';
-    const td=(c,red)=>`<td style="${bd}padding:5px 9px;${F}text-align:center;background:#ffffff;color:${red?'#ff0000':'#000000'};${red?'font-weight:bold;':''}">${esc(c)}</td>`;
-    h+='<tr>'+r.orig.map(c=>td(c,false)).join('')+r.report.map((c,i)=>td(c,r.redReport[i])).join('')+'</tr>';
+    const td=(c,red,yellow,orange)=>{
+      const bg=yellow?'#fff3b0':(orange?'#ffcc80':'#ffffff');
+      return `<td style="${bd}padding:5px 9px;${F}text-align:center;background:${bg};color:${red&&!orange&&!yellow?'#ff0000':'#000000'};${red&&!orange&&!yellow?'font-weight:bold;':''}">${esc(c)}</td>`;
+    };
+    h+='<tr>'+r.orig.map(c=>td(c,false,false,false)).join('')+r.report.map((c,i)=>td(c,r.redReport[i],r.yellowReport[i],r.orangeReport[i])).join('')+'</tr>';
   });
   return h+'</table>';
 }
@@ -403,24 +449,9 @@ function sameVal(a,b){
 async function downloadCompareXlsx(){
   if(!lastResult) return;
   if(typeof ExcelJS==="undefined"){ toast("ExcelJS 未加载（需联网）",true); return; }
-  const {out,leftExtraCols}=lastResult;
-  const headers=headerCols();
-  const origN=1+leftExtraCols;                        // 原始块列数（型号+左表自带列，如 Qty）
-  const origHead=[]; for(let i=0;i<origN;i++) origHead.push(headers[i]||("列"+(i+1)));
+  const {origHead,headers,rows}=buildCompareModel();
+  const origN=origHead.length;                        // 原始块列数
   const allHead=[...origHead,...headers];             // 原始块 + 报表块
-
-  // 组装每行数据 + 标红位置（记录报表块里哪些格子要红字）
-  const rows=out.map(o=>{
-    const orig=[o.pn,...o.leftExtra]; while(orig.length<origN) orig.push("");
-    const reportPN=o.rightPn||o.pn;
-    const report=[reportPN,...o.data]; while(report.length<headers.length) report.push("");
-    const redReport=new Array(headers.length).fill(false);
-    // 型号变化：原始字符串与报表型号不同（大小写/后缀/空白差异也算）
-    if(String(reportPN).trim() && String(reportPN).trim()!==String(o.pn).trim()) redReport[0]=true;
-    // Qty 变化：原始 Qty(左表第2列) vs 报表 Qty(headers 第2列)
-    if(headers.length>1 && leftExtraCols>=1 && !sameVal(o.leftExtra[0],o.data[0])) redReport[1]=true;
-    return {orig,report,redReport,hasPn:!!String(o.pn).trim()};
-  });
 
   // 列宽
   const widthsOf=arr=>{
@@ -455,8 +486,13 @@ async function downloadCompareXlsx(){
     row.height=20;
     row.eachCell({includeEmpty:true},(c,col)=>{
       c.alignment=center;
-      const isRed = col>origN && r.redReport[col-origN-1];  // 报表块且该格标红
+      const ri2 = col-origN-1;                              // 报表块内的列下标
+      const isYellow = col>origN && r.yellowReport[ri2];    // 近似填入标黄
+      const isOrange = col>origN && r.orangeReport[ri2];    // 数量变化标橙
+      const isRed = col>origN && r.redReport[ri2] && !isYellow && !isOrange;  // 其他变化标红
       c.font={size:12, color: isRed?{argb:"FFFF0000"}:undefined, bold:isRed||false};
+      if(isYellow) c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFF3B0"}};
+      else if(isOrange) c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFCC80"}};
       if(r.hasPn) c.border=allBorder;
     });
   });
@@ -468,47 +504,6 @@ async function downloadCompareXlsx(){
   a.download="报价对比_"+new Date().toISOString().slice(0,10)+".xlsx";
   a.click(); URL.revokeObjectURL(a.href);
   toast("已下载对比表");
-}
-
-/* ===== 图片识别：调 Gemini 多模态 ===== */
-$("apiKey").value=store.get("gemKey");
-$("model").value=store.get("gemModel");
-async function ocr(){
-  const key=$("apiKey").value.trim();
-  const model=($("model").value.trim()||"gemini-2.5-flash");
-  const file=$("img").files[0];
-  if(!key){toast("先填 Gemini API Key",true);return;}
-  if(!file){toast("先选一张图片",true);return;}
-  store.set("gemKey",key); store.set("gemModel",$("model").value.trim());
-  $("ocrStat").textContent="识别中…";
-  try{
-    const b64=await fileToB64(file);
-    const prompt="这是电子元件报价/清单表格的截图。请逐行提取每一行的所有单元格，按从左到右顺序，"+
-      "第一列必须是元件型号。输出纯文本，每行一条记录，单元格之间用制表符(Tab,\\t)分隔，"+
-      "不要表头、不要解释、不要markdown代码块、不要序号。型号原样保留（含 #、+、- 等符号和大小写）。";
-    const body={contents:[{parts:[
-      {text:prompt},
-      {inline_data:{mime_type:file.type,data:b64}}
-    ]}]};
-    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-    const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    const j=await res.json();
-    if(!res.ok) throw new Error(j.error?.message||("HTTP "+res.status));
-    let txt=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join("")||"";
-    txt=txt.replace(/^```[\w]*\n?|```$/g,"").trim();
-    const target=document.querySelector('input[name=ocrTarget]:checked').value;
-    const box=$(target);
-    box.value=(box.value.trim()?box.value.trim()+"\n":"")+txt;
-    $("ocrStat").textContent="已填入"+(target==="left"?"左表":"右表");
-    toast("识别完成");
-  }catch(e){ $("ocrStat").textContent=""; toast("识别失败："+e.message,true); }
-}
-function fileToB64(file){
-  return new Promise((ok,no)=>{
-    const r=new FileReader();
-    r.onload=()=>ok(r.result.split(",")[1]);
-    r.onerror=no; r.readAsDataURL(file);
-  });
 }
 
 $("run").onclick=run;
@@ -528,7 +523,6 @@ $("themeBtn").onclick=()=>{
   applyTheme(next); store.set("theme",next);
 };
 $("keepRightPn").onchange=()=>{ if(lastResult){render();} };
-$("ocr").onclick=ocr;
 </script>
 </body>
 </html>
