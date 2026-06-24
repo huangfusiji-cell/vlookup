@@ -11,6 +11,13 @@
     --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --ok:#22c55e;
     --warn:#f59e0b; --err:#ef4444; --radius:10px;
   }
+  body[data-theme="light"]{
+    --bg:#f5f7fa; --panel:#ffffff; --panel2:#eef2f7; --line:#d4dae3;
+    --txt:#1e293b; --muted:#64748b; --accent:#93c5fd; --ok:#16a34a;
+    --warn:#d97706; --err:#dc2626;
+  }
+  #themeBtn{margin-left:auto;align-self:center;background:transparent;color:var(--txt);
+    border:1px solid var(--line);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer}
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
     background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5}
@@ -66,6 +73,7 @@
 <header>
   <h1>型号匹配回填工具</h1>
   <span class="sub">左表=要报的型号顺序 · 右表=能报的型号+数据 → 按型号匹配，回填到左表位置，一键复制回 Excel</span>
+  <button id="themeBtn" title="切换深色/浅色">🌙 深色</button>
 </header>
 
 <main>
@@ -465,6 +473,17 @@ $("copy").onclick=()=>copy(true);
 $("copyNoHead").onclick=()=>copy(false);
 $("dl").onclick=downloadXlsx;
 $("dlCmp").onclick=downloadCompareXlsx;
+
+/* ===== 主题切换（深色/浅色），记住选择 ===== */
+function applyTheme(t){
+  document.body.setAttribute("data-theme",t);
+  $("themeBtn").textContent = t==="light" ? "☀️ 浅色" : "🌙 深色";
+}
+applyTheme(store.get("theme")||"light");
+$("themeBtn").onclick=()=>{
+  const next = document.body.getAttribute("data-theme")==="light" ? "dark" : "light";
+  applyTheme(next); store.set("theme",next);
+};
 $("keepRightPn").onchange=()=>{ if(lastResult){render();} };
 $("ocr").onclick=ocr;
 </script>
