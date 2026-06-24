@@ -45,8 +45,9 @@
   .scroll{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px}
   /* 结果表：全屏宽 + 单元格可换行，尽量一屏容纳所有列 */
   #resultWrap{width:96vw;position:relative;left:50%;transform:translateX(-50%)}
-  #result{table-layout:fixed}
-  #result th,#result td{white-space:normal;word-break:break-word;font-size:12px;padding:5px 6px}
+  /* 列宽随内容自适应；型号等内容始终单行不折断，太长则列自动加宽 */
+  #result{table-layout:auto;width:max-content;min-width:100%}
+  #result th,#result td{white-space:nowrap;font-size:12px;padding:5px 8px}
   details{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
   summary{cursor:pointer;font-weight:600}
   input[type=text],input[type=password]{background:var(--panel2);color:var(--txt);
