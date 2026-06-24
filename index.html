@@ -18,7 +18,7 @@
     display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
   header h1{font-size:18px;margin:0}
   header .sub{color:var(--muted);font-size:12px}
-  main{padding:20px 24px;max-width:1500px;margin:0 auto}
+  main{padding:20px 24px;max-width:1800px;margin:0 auto}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
   .card h2{font-size:14px;margin:0 0 4px}
@@ -42,7 +42,11 @@
   .tag.miss{background:rgba(239,68,68,.15);color:var(--err)}
   .tag.extra{background:rgba(245,158,11,.15);color:var(--warn)}
   .stat{color:var(--muted);font-size:12px;margin-left:auto}
-  .scroll{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px}
+  .scroll{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:8px}
+  /* 结果表：全屏宽 + 单元格可换行，尽量一屏容纳所有列 */
+  #resultWrap{width:96vw;position:relative;left:50%;transform:translateX(-50%)}
+  #result{table-layout:fixed}
+  #result th,#result td{white-space:normal;word-break:break-word;font-size:12px;padding:5px 6px}
   details{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
   summary{cursor:pointer;font-weight:600}
   input[type=text],input[type=password]{background:var(--panel2);color:var(--txt);
