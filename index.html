@@ -247,30 +247,73 @@ function render(){
 
 function esc(s){return String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 
-/* ===== 复制：生成 Tab 分隔，可直接粘回 Excel，行序=左表顺序 ===== */
+/* ===== 对比数据模型：原始块(左表)+报表块，并记录哪些报表格子要标红 ===== */
+function buildCompareModel(){
+  const {out,leftExtraCols}=lastResult;
+  const headers=headerCols();
+  const origN=1+leftExtraCols;
+  const origHead=[]; for(let i=0;i<origN;i++) origHead.push(headers[i]||("列"+(i+1)));
+  const rows=out.map(o=>{
+    const orig=[o.pn,...o.leftExtra]; while(orig.length<origN) orig.push("");
+    const reportPN=o.rightPn||o.pn;
+    const report=[reportPN,...o.data]; while(report.length<headers.length) report.push("");
+    const redReport=new Array(headers.length).fill(false);
+    if(String(reportPN).trim() && String(reportPN).trim()!==String(o.pn).trim()) redReport[0]=true;
+    if(headers.length>1 && leftExtraCols>=1 && !sameVal(o.leftExtra[0],o.data[0])) redReport[1]=true;
+    return {orig,report,redReport,hasPn:!!String(o.pn).trim()};
+  });
+  return {origHead,headers,rows};
+}
+
+/* ===== 复制(纯文本兜底)：对比布局，Tab 分隔 ===== */
 function buildTSV(withHead){
-  const {out}=lastResult;
+  const {origHead,headers,rows}=buildCompareModel();
   const lines=[];
-  if(withHead) lines.push(headerCols().join("\t"));
-  out.forEach(o=>lines.push(rowCells(o).join("\t")));
+  if(withHead) lines.push([...origHead,...headers].join("\t"));
+  rows.forEach(r=>lines.push([...r.orig,...r.report].join("\t")));
   return lines.join("\n");
+}
+
+/* ===== 复制(带格式 HTML)：对比布局，Arial 12，居中，有型号加黑框，变化标红 ===== */
+function buildHTMLTable(withHead){
+  const {origHead,headers,rows}=buildCompareModel();
+  const F="font-family:Arial,sans-serif;font-size:12pt;";
+  const th=(x,bg)=>`<th style="border:1px solid #000;padding:5px 9px;${F}font-weight:bold;text-align:center;background:${bg}">${esc(x)}</th>`;
+  let h='<table style="border-collapse:collapse;font-family:Arial,sans-serif">';
+  if(withHead){
+    h+='<tr>'+origHead.map(x=>th(x,'#d9e1f2')).join('')+headers.map(x=>th(x,'#e6e6e6')).join('')+'</tr>';
+  }
+  rows.forEach(r=>{
+    const bd=r.hasPn?'border:1px solid #000;':'';
+    const td=(c,red)=>`<td style="${bd}padding:5px 9px;${F}text-align:center;background:#ffffff;color:${red?'#ff0000':'#000000'};${red?'font-weight:bold;':''}">${esc(c)}</td>`;
+    h+='<tr>'+r.orig.map(c=>td(c,false)).join('')+r.report.map((c,i)=>td(c,r.redReport[i])).join('')+'</tr>';
+  });
+  return h+'</table>';
 }
 async function copy(withHead){
   if(!lastResult) return;
+  const html=buildHTMLTable(withHead);
   const text=buildTSV(withHead);
-  // 优先用现代剪贴板 API（仅 https/localhost 等安全上下文可用）
-  if(navigator.clipboard && window.isSecureContext){
-    try{ await navigator.clipboard.writeText(text); toast("已复制，去 Excel 按 Ctrl+V"); return; }
-    catch(e){ /* 失败则走兜底 */ }
+  // 优先：现代剪贴板 API 同时写 HTML(带格式) + 纯文本(兜底)
+  if(navigator.clipboard && window.ClipboardItem && window.isSecureContext){
+    try{
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html":new Blob([html],{type:"text/html"}),
+        "text/plain":new Blob([text],{type:"text/plain"})
+      })]);
+      toast("已复制(带格式)，去 Excel 按 Ctrl+V"); return;
+    }catch(e){ /* 走兜底 */ }
   }
-  // 兜底：file:// 或沙箱环境用旧版 execCommand
+  // 兜底：选中渲染好的 HTML 再 execCommand 复制（file:///沙箱也能带格式）
   try{
-    const ta=document.createElement("textarea");
-    ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
-    document.body.appendChild(ta); ta.focus(); ta.select();
+    const div=document.createElement("div");
+    div.style.position="fixed"; div.style.left="-99999px"; div.style.top="0";
+    div.innerHTML=html; document.body.appendChild(div);
+    const range=document.createRange(); range.selectNode(div);
+    const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
     const ok=document.execCommand("copy");
-    document.body.removeChild(ta);
-    toast(ok?"已复制，去 Excel 按 Ctrl+V":"复制失败，请手动选中复制",!ok);
+    sel.removeAllRanges(); document.body.removeChild(div);
+    toast(ok?"已复制(带格式)，去 Excel 按 Ctrl+V":"复制失败，请手动选中复制",!ok);
   }catch(e){ toast("复制失败："+e.message,true); }
 }
 
